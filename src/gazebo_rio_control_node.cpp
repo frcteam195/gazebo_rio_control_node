@@ -20,7 +20,7 @@ void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 	for(uint32_t i = 1; i < 5; i+=3)
 	{
 		rio_control_node::Motor_Info motor_info;
-		motor_info.id = 1;
+		motor_info.id = i;
 		// TBD MGT - FIXME TODO - this needs to be mathed but I'm not
 		// sure what the turtlebot waffle track width is right now so I'm
 		// just moving forward to get comms setup
