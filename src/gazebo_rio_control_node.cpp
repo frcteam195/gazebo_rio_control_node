@@ -1,11 +1,40 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include "nav_msgs/Odometry.h"
+#include "geometry_msgs/Twist.h"
+#include "rio_control_node/Motor_Control.h"
+#include "rio_control_node/Motor_Status.h"
 
 #include <thread>
 #include <string>
 #include <mutex>
 
 ros::NodeHandle* node;
+
+void gazebo_odom_callback(const geometry_msgs::Twist &msg)
+{
+	static ros::Publisher motor_status_pub = node->advertise<rio_control_node::Motor_Status>("MotorStatus", 1);
+
+	ROS_INFO("Got some kinda somethin\n");
+
+	rio_control_node::Motor_Status motor_status;
+
+	for(uint32_t i = 1; i < 5; i+=3)
+	{
+		rio_control_node::Motor_Info motor_info;
+		motor_info.id = 1;
+		// TBD MGT - FIXME TODO - this needs to be mathed but I'm not
+		// sure what the turtlebot waffle track width is right now so I'm
+		// just moving forward to get comms setup
+		motor_info.sensor_velocity = msg.linear.x;
+		motor_status.motors.push_back(motor_info);
+	}
+	motor_status_pub.publish(motor_status);
+}
+
+void motorControlCallback(const rio_control_node::Motor_Control &msg)
+{
+}
 
 int main(int argc, char **argv)
 {
@@ -24,6 +53,9 @@ int main(int argc, char **argv)
 	ros::NodeHandle n;
 
 	node = &n;
+
+	ros::Subscriber motorControl = node->subscribe("MotorControl", 100, motorControlCallback);
+	ros::Subscriber motorConfig = node->subscribe("/gazebo_odom", 100, gazebo_odom_callback);
 
 	ros::spin();
 	return 0;

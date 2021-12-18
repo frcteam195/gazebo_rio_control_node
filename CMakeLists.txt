@@ -106,7 +106,7 @@ catkin_package(
 #  LIBRARIES rio_control_node
 #  CATKIN_DEPENDS other_catkin_pkg
 #  DEPENDS system_lib
-  CATKIN_DEPENDS roscpp message_generation message_runtime rio_control_node
+  CATKIN_DEPENDS roscpp message_generation message_runtime rio_control_node nav_msgs geometry_msgs
 )
 
 ###########
@@ -118,9 +118,6 @@ catkin_package(
 include_directories(
 # include
  ${catkin_INCLUDE_DIRS}
- ${CMAKE_SOURCE_DIR}/../../../third_party_libs/CKROSlibzmq/include
- ${CMAKE_SOURCE_DIR}/../../../third_party_libs/CKROSprotobuf/src
- ${CMAKE_SOURCE_DIR}/../../../third_party_libs/ROSProtoDef2022/out
 )
 
 message("CATKIN INCLUDES:${catkin_INCLUDE_DIRS}")
