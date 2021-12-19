@@ -11,11 +11,23 @@
 
 ros::NodeHandle* node;
 
+constexpr double TRACK_WIDTH = .16;
+
 void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 {
 	static ros::Publisher motor_status_pub = node->advertise<rio_control_node::Motor_Status>("MotorStatus", 1);
 
 	rio_control_node::Motor_Status motor_status;
+
+	// double robot_velocity = (left_velocity + right_velocity) / 2.0;
+	// double angular_velocity = (right_velocity - left_velocity) / TRACK_SPACING;
+
+    double angular_velocity = msg.twist.twist.angular.z;
+    double temp = angular_velocity * TRACK_WIDTH;
+
+    double average_velocity = msg.twist.twist.linear.x;
+    double left_velocity = average_velocity - (temp / 2.0);
+    double right_velocity = average_velocity + (temp / 2.0);
 
 	for(uint32_t i = 1; i < 5; i+=3)
 	{
@@ -24,7 +36,7 @@ void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 		// TBD MGT - FIXME TODO - this needs to be mathed but I'm not
 		// sure what the turtlebot waffle track width is right now so I'm
 		// just moving forward to get comms setup
-		motor_info.sensor_velocity = msg.twist.twist.linear.x;
+		motor_info.sensor_velocity = i == 1 ? left_velocity : right_velocity;
 		motor_status.motors.push_back(motor_info);
 	}
 	motor_status_pub.publish(motor_status);
