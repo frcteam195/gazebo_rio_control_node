@@ -44,6 +44,45 @@ void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 
 void motorControlCallback(const rio_control_node::Motor_Control &msg)
 {
+    static std::map<int32_t, rio_control_node::Motor> motors;
+    for(std::vector<rio_control_node::Motor>::const_iterator i = msg.motors.begin();
+       i != msg.motors.end();
+       i++)
+    {
+        motors[(*i).id] = (*i);
+    }
+
+    geometry_msgs::Twist output;
+
+    if(motors.find(1) != motors.end() && motors.find(4) != motors.end())
+    {
+        double left_velocity = motors[1].output_value;
+        double right_velocity = motors[4].output_value;
+
+        double robot_velocity = (left_velocity + right_velocity) / 2.0;
+        double angular_velocity = (right_velocity - left_velocity) / TRACK_WIDTH;
+
+        output.linear.x = robot_velocity;
+        output.linear.y = 0;
+        output.linear.z = 0;
+
+        output.angular.x = 0;
+        output.angular.y = 0;
+        output.angular.z = angular_velocity;
+    }
+    else
+    {
+        output.linear.x = 0;
+        output.linear.y = 0;
+        output.linear.z = 0;
+
+        output.angular.x = 0;
+        output.angular.y = 0;
+        output.angular.z = 0;
+    }
+
+	static ros::Publisher cmd_vel_publisher = node->advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+	cmd_vel_publisher.publish(output);
 }
 
 int main(int argc, char **argv)
