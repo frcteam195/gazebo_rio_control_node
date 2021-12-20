@@ -4,6 +4,7 @@
 #include "geometry_msgs/Twist.h"
 #include "rio_control_node/Motor_Control.h"
 #include "rio_control_node/Motor_Status.h"
+#include "rio_control_node/Robot_Status.h"
 
 #include <thread>
 #include <string>
@@ -16,6 +17,7 @@ constexpr double TRACK_WIDTH = .16;
 void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 {
 	static ros::Publisher motor_status_pub = node->advertise<rio_control_node::Motor_Status>("MotorStatus", 1);
+    static ros::Publisher robot_status_pub = node->advertise<rio_control_node::Robot_Status>("RobotStatus", 1);
 
 	rio_control_node::Motor_Status motor_status;
 
@@ -40,6 +42,15 @@ void gazebo_odom_callback(const nav_msgs::Odometry &msg)
 		motor_status.motors.push_back(motor_info);
 	}
 	motor_status_pub.publish(motor_status);
+
+    rio_control_node::Robot_Status robot_status;
+
+    robot_status.alliance = robot_status.RED;
+    robot_status.robot_state = robot_status.AUTONOMOUS;
+    robot_status.match_time = 0;
+    robot_status.game_data = "000";
+
+    robot_status_pub.publish(robot_status);
 }
 
 void motorControlCallback(const rio_control_node::Motor_Control &msg)
