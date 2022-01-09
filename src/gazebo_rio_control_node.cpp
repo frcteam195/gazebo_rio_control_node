@@ -28,7 +28,7 @@ void gazebo_link_states_callback(const gazebo_msgs::LinkStates &msg)
 
     rio_control_node::Motor_Status motor_status;
 
-    for( int i = 0; i < msg.name.size(); i++)
+    for( size_t i = 0; i < msg.name.size(); i++)
     {
         std::string link_name = msg.name[i];
         // we are watching this link
@@ -48,12 +48,13 @@ void gazebo_link_states_callback(const gazebo_msgs::LinkStates &msg)
 
 void motor_config_callback(const rio_control_node::Motor_Config &msg)
 {
+    (void)msg;
 }
 
 void motor_control_callback(const rio_control_node::Motor_Control &msg)
 {
     std::cout << "Motor Control Callback\n";
-    for( int i = 0; i < msg.motors.size(); i++ )
+    for( size_t i = 0; i < msg.motors.size(); i++ )
     {
         std::string body_name;
         bool found = false;
