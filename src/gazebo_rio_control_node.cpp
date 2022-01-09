@@ -2,121 +2,115 @@
 #include "std_msgs/String.h"
 #include "nav_msgs/Odometry.h"
 #include "geometry_msgs/Twist.h"
+
 #include "rio_control_node/Motor_Control.h"
+#include "rio_control_node/Motor_Config.h"
 #include "rio_control_node/Motor_Status.h"
 #include "rio_control_node/Robot_Status.h"
+
+#include "gazebo_msgs/LinkStates.h"
+#include "gazebo_msgs/ApplyBodyWrench.h"
 
 #include <thread>
 #include <string>
 #include <mutex>
 
+#define RATE (100)
+
 ros::NodeHandle* node;
+std::map<std::string, int> links_to_watch;
 
-constexpr double TRACK_WIDTH = .16;
 
-void gazebo_odom_callback(const nav_msgs::Odometry &msg)
+void gazebo_link_states_callback(const gazebo_msgs::LinkStates &msg)
 {
-	static ros::Publisher motor_status_pub = node->advertise<rio_control_node::Motor_Status>("MotorStatus", 1);
-    static ros::Publisher robot_status_pub = node->advertise<rio_control_node::Robot_Status>("RobotStatus", 1);
+	static ros::Publisher motor_status_pub
+        = node->advertise<rio_control_node::Motor_Status>("MotorStatus", 1);
 
-	rio_control_node::Motor_Status motor_status;
+    rio_control_node::Motor_Status motor_status;
 
-	// double robot_velocity = (left_velocity + right_velocity) / 2.0;
-	// double angular_velocity = (right_velocity - left_velocity) / TRACK_SPACING;
+    for( int i = 0; i < msg.name.size(); i++)
+    {
+        std::string link_name = msg.name[i];
+        // we are watching this link
+        if( links_to_watch.count( link_name ) )
+        {
+            rio_control_node::Motor_Info motor_info;
+            motor_info.sensor_position = msg.pose[i].position.y;
+            motor_info.sensor_velocity = msg.twist[i].angular.y;
+            motor_info.id = links_to_watch[link_name];
+            motor_status.motors.push_back( motor_info );
+        }
+    }
 
-    double angular_velocity = msg.twist.twist.angular.z;
-    double temp = angular_velocity * TRACK_WIDTH;
-
-    double average_velocity = msg.twist.twist.linear.x;
-    double left_velocity = average_velocity - (temp / 2.0);
-    double right_velocity = average_velocity + (temp / 2.0);
-
-	for(uint32_t i = 1; i < 5; i+=3)
-	{
-		rio_control_node::Motor_Info motor_info;
-		motor_info.id = i;
-		// TBD MGT - FIXME TODO - this needs to be mathed but I'm not
-		// sure what the turtlebot waffle track width is right now so I'm
-		// just moving forward to get comms setup
-		motor_info.sensor_velocity = i == 1 ? left_velocity : right_velocity;
-		motor_status.motors.push_back(motor_info);
-	}
-	motor_status_pub.publish(motor_status);
-
-    rio_control_node::Robot_Status robot_status;
-
-    robot_status.alliance = robot_status.RED;
-    robot_status.robot_state = robot_status.AUTONOMOUS;
-    robot_status.match_time = 0;
-    robot_status.game_data = "000";
-
-    robot_status_pub.publish(robot_status);
+    motor_status_pub.publish(motor_status);
 }
 
-void motorControlCallback(const rio_control_node::Motor_Control &msg)
+
+void motor_config_callback(const rio_control_node::Motor_Config &msg)
 {
-    static std::map<int32_t, rio_control_node::Motor> motors;
-    for(std::vector<rio_control_node::Motor>::const_iterator i = msg.motors.begin();
-       i != msg.motors.end();
-       i++)
+}
+
+void motor_control_callback(const rio_control_node::Motor_Control &msg)
+{
+    std::cout << "Motor Control Callback\n";
+    for( int i = 0; i < msg.motors.size(); i++ )
     {
-        motors[(*i).id] = (*i);
+        std::string body_name;
+        bool found = false;
+        for( auto it = links_to_watch.begin(); it != links_to_watch.end(); it++ )
+        {
+
+            std::cout << "it: " << it->first << ":" << it->second << " ... " << msg.motors[i].id << "\n";
+            if( it->second == msg.motors[i].id )
+            {
+                body_name = it->first;
+                found = true;
+                break;
+            }
+        }
+
+        if( !found ){ continue; }
+
+        std::cout << "Body : " << body_name << "\n";
+
+        static ros::ServiceClient gazebo_body_wrench_client
+            = node->serviceClient<gazebo_msgs::ApplyBodyWrench>("/gazebo/apply_body_wrench");
+
+        gazebo_msgs::ApplyBodyWrench apply_wrench;
+        apply_wrench.request.body_name = body_name;
+        apply_wrench.request.wrench.torque.y = msg.motors[i].output_value;
+        apply_wrench.request.duration = ros::Duration(1);
+
+        gazebo_body_wrench_client.call( apply_wrench );
+        std::cout << "Sent: " << apply_wrench.request << "\n";
     }
-
-    geometry_msgs::Twist output;
-
-    if(motors.find(1) != motors.end() && motors.find(4) != motors.end())
-    {
-        double left_velocity = motors[1].output_value;
-        double right_velocity = motors[4].output_value;
-
-        double robot_velocity = (left_velocity + right_velocity) / 2.0;
-        double angular_velocity = (right_velocity - left_velocity) / TRACK_WIDTH;
-
-        output.linear.x = robot_velocity;
-        output.linear.y = 0;
-        output.linear.z = 0;
-
-        output.angular.x = 0;
-        output.angular.y = 0;
-        output.angular.z = angular_velocity;
-    }
-    else
-    {
-        output.linear.x = 0;
-        output.linear.y = 0;
-        output.linear.z = 0;
-
-        output.angular.x = 0;
-        output.angular.y = 0;
-        output.angular.z = 0;
-    }
-
-	static ros::Publisher cmd_vel_publisher = node->advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-	cmd_vel_publisher.publish(output);
 }
 
 int main(int argc, char **argv)
 {
-	/**
-	 * The ros::init() function needs to see argc and argv so that it can perform
-	 * any ROS arguments and name remapping that were provided at the command line.
-	 * For programmatic remappings you can use a different version of init() which takes
-	 * remappings directly, but for most command-line programs, passing argc and argv is
-	 * the easiest way to do it.  The third argument to init() is the name of the node.
-	 *
-	 * You must call one of the versions of ros::init() before using any other
-	 * part of the ROS system.
-	 */
 	ros::init(argc, argv, "gazebo_rio_control_node");
-
 	ros::NodeHandle n;
-
 	node = &n;
+    ros::Rate rate(RATE);
 
-	ros::Subscriber motorControl = node->subscribe("MotorControl", 100, motorControlCallback);
-	ros::Subscriber gazeob_odom = node->subscribe("/gazebo_odom", 100, gazebo_odom_callback);
+    links_to_watch["flatty::wheel_l_1"] = 0;
+    links_to_watch["flatty::wheel_l_2"] = 1;
+    links_to_watch["flatty::wheel_l_3"] = 2;
+    links_to_watch["flatty::wheel_r_1"] = 3;
+    links_to_watch["flatty::wheel_r_2"] = 4;
+    links_to_watch["flatty::wheel_r_3"] = 5;
 
-	ros::spin();
+	ros::Subscriber motorConfig = node->subscribe("MotorConfiguration", 100, motor_config_callback);
+	ros::Subscriber motorControl = node->subscribe("MotorControl", 100, motor_control_callback);
+	ros::Subscriber gazeob_link_states = node->subscribe("/gazebo/link_states", 100, gazebo_link_states_callback);
+
+
+    while( ros::ok() )
+    {
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+
 	return 0;
 }
